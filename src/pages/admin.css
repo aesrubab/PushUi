@@ -1,0 +1,268 @@
+@font-face{
+  font-family:"MadaniArabic";
+  src:url("/fonts/MadaniArabic-Regular.woff2") format("woff2");
+  font-weight:400; font-style:normal; font-display:swap;
+}
+
+/* ================== */
+/*   THEME / GLOBAL   */
+/* ================== */
+:root{
+  --bg:#0b0b0f;
+  --panel:#12121a;
+  --weak:#FFFFFF0D;
+  --text:#e8e8f1;
+
+  --vio1:#AC9BD4;
+  --vio2:#8077C1;
+  --vio3:#6B65B7;
+  --vio4:#5553AD;
+  --ink:#060010;
+}
+
+*{ box-sizing:border-box; }
+html, body, #root { height:100%; }
+body{ background:var(--bg); color:var(--text); }
+
+.admin{
+  background:var(--ink);
+  min-height:100vh;
+  padding:16px 40px 40px;
+  overflow:auto;
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  font-family:"MadaniArabic", Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* Kanvas (sabit en) */
+.board{
+  width:1351px;
+  margin:0 auto;
+  will-change:transform;
+}
+
+/* Header */
+.header{
+  height:116px;
+  border-radius:24px;
+  background: var(--weak);
+  display:flex; align-items:center; justify-content:center; gap:12px;
+  margin-bottom:14px;
+}
+.header .header-img{ height:56px; }
+
+/* ================= */
+/*   STAT CARDS      */
+/* ================= */
+.stat-row{
+  display:grid;
+  grid-template-columns: repeat(3, 434.333px);
+  gap:18px;
+  justify-content: space-between;
+  margin-bottom:14px;
+}
+
+.stat-card{
+  position:relative;
+  height:170px;
+  border-radius:24px;
+  overflow:hidden;
+  padding:16px 20px;
+  isolation:isolate;
+  --right-art-w: 190px;
+  --right-art-fade: 40px;
+  border:1px solid transparent;
+  background:
+    linear-gradient(97.16deg, #060010 -90.97%, #6B65B7 -42.52%, #060010 3.15%, #060010 87.02%) border-box,
+    linear-gradient(99.09deg, #060010 -5.58%, #5553AD 56%, #6B65B7 89.53%, #8077C1 125.1%) border-box,
+    #15151d padding-box;
+  background-clip: padding-box, border-box, padding-box;
+}
+.stat-card::after{
+  content:"";
+  position:absolute;
+  right:0;
+  top:50%;
+  width:var(--right-art-w);
+  height:166.761px;
+  transform:translateY(-50%) rotate(90deg);
+  background:url("../assets/CardBg.png") right center / auto 100% no-repeat;
+  opacity:.26;
+  pointer-events:none;
+  z-index:0;
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - var(--right-art-fade)), transparent);
+          mask-image: linear-gradient(to left, #000 calc(100% - var(--right-art-fade)), transparent);
+}
+.stat-top{ opacity:.7; font-size:12px; position:relative; z-index:1; }
+.stat-title{ margin-top:6px; font-size:18px; position:relative; z-index:1; }
+.stat-value{ position:absolute; left:20px; bottom:18px; font-size:42px; font-weight:800; z-index:1; }
+
+/* Ortadakı kart – overlay-i sola güzgü et */
+.stat-card.left.mirror::after{
+  left:-18px; right:auto;
+  background-position:left center;
+  transform: translateY(-50%) rotate(90deg) scaleX(-1);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--right-art-fade)), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - var(--right-art-fade)), transparent);
+  background-repeat:no-repeat;
+}
+
+/* ================= */
+/*  PANELS / GROUP   */
+/* ================= */
+.group{
+  margin-top:6px;
+  padding:10px;
+  border-radius:16px;
+  border:1px solid transparent;
+  background:
+    linear-gradient(97.16deg, #8077C1 -90.97%, #6B65B7 -42.52%, #5553AD 3.15%, #060010 87.02%) border-box,
+    linear-gradient(99.09deg, #060010 -5.58%, #5553AD 56%, #6B65B7 89.53%, #8077C1 125.1%) border-box,
+    transparent padding-box;
+  background-clip: padding-box, border-box, padding-box;
+}
+
+.grid-2{ display:grid; grid-template-columns: 1fr 1fr; gap:24px; }
+.panel{ background: var(--panel); border-radius:24px; padding:14px; }
+
+.section-title{
+  font-size:24px; line-height:100%;
+  margin:2px 0 10px;
+  background: linear-gradient(238.19deg, #674BAF 12.68%, #5D58AC 25.75%, #627AB9 35.93%, #7BBDE3 46.92%, #8FDDFF 56.84%, #808ED8 68.67%, #7966C5 74.58%, #713EB1 83.66%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+}
+.section-title.sm{ font-size:20px; margin-top:14px; }
+
+/* ========================= */
+/*   FORM (labels sağ/sol)   */
+/* ========================= */
+.form-panel{ background:var(--ink); }
+
+.f-row{ display:flex; align-items:center; gap:14px; margin:12px 0; }
+.f-label{ min-width: 180px; color:#cfd3ff; opacity:.9; }
+.f-input{
+  width:409.5px; height:54px; border-radius:16px; padding:16px 28px;
+  border:0.4px solid transparent;
+  border-image: linear-gradient(90deg, #EFFFFF 0%, #CDCDEA 25%, #AC9BD4 62.5%, #8077C1 81.25%, #6B65B7 90.62%, #5553AD 100%) 1;
+  background:var(--ink); color:var(--text); outline:none;
+}
+.f-input::placeholder{ color:#9aa0a6; }
+.f-input:focus{ box-shadow:0 0 0 3px rgba(128,119,193,.15); }
+
+/* ========================= */
+/*   TIMER / SCHEDULE UI     */
+/* ========================= */
+.timer-block{ width:635.5px; }
+
+.timer-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:18px;
+  margin-bottom:10px;
+}
+
+/* ikonlu input qabı */
+.t-input{
+  position:relative;
+  height:54px;
+  border-radius:16px;
+  padding:0 28px;
+  border:0.4px solid transparent;
+  border-image: linear-gradient(90deg, #EFFFFF 0%, #CDCDEA 25%, #AC9BD4 62.5%, #8077C1 81.25%, #6B65B7 90.62%, #5553AD 100%) 1;
+  background:var(--ink);
+  display:flex; align-items:center;
+}
+.t-text{
+  width:100%; height:100%;
+  background:transparent; border:0; outline:none;
+  color:var(--text); padding-right:32px; font:inherit;
+}
+.t-text::placeholder{ color:#9aa0a6; }
+
+/* ikon */
+.t-ico{
+  position:absolute; right:12px; top:50%; transform:translateY(-50%);
+  width:18px; height:18px; color:#CAC1F2; opacity:.9;
+}
+
+/* Aşağıdakı düymələr */
+.form-actions{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+  align-items:center;
+}
+.btn-send{
+  height:44px;
+  border-radius:24px;
+  padding:10px 10px 10px 28px;
+  border:1.1px solid transparent;
+  border-image: linear-gradient(89.86deg, var(--vio1) -40.2%, #9C8ECD -16.71%, var(--vio2) 4.65%, var(--vio3) 42.43%, var(--vio4) 84.54%, var(--ink) 114.45%) 1;
+  background:var(--ink);
+  color:#CAC1F2;
+  font-weight:700; font-size:16px;
+  letter-spacing:.2px;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+}
+.btn-send:disabled{ opacity:.6; cursor:not-allowed; }
+
+.btn-send.outline{
+  border-image: linear-gradient(90deg, #EFFFFF 0%, #CDCDEA 25%, var(--vio1) 62.5%, var(--vio2) 81.25%, var(--vio3) 90.62%, var(--vio4) 100%) 1;
+}
+
+.btn-cancelEdit{
+  grid-column: 1 / -1;
+  justify-self:center;
+  margin-top:4px;
+  background:none; border:none; cursor:pointer;
+  color:#bfb9ef; opacity:.85; font-weight:600;
+}
+.btn-cancelEdit:hover{ opacity:1; text-decoration:underline; }
+
+/* ========================= */
+/*        LIST / ITEMS       */
+/* ========================= */
+.list-caption{
+  margin:6px 0 4px;
+  font-size:13px; letter-spacing:.4px; text-transform:uppercase;
+  background: linear-gradient(238.19deg, #7BBDE3 16%, #8FDDFF 44%, #808ED8 70%, #713EB1 92%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+}
+
+.list{ list-style:none; margin:0; padding:0; }
+.list-item{ padding:12px 8px; border-bottom:1px solid #23232b; }
+.list-item.empty{ opacity:.6; }
+.li-title{ font-weight:700; }
+.li-body{ opacity:.85; margin:4px 0; }
+.li-time{ opacity:.6; font-size:12px; }
+
+/* sağda redaktə/ silmə düymələri olan sıra */
+.li-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.li-main{ min-width:0; }
+.li-actions{ display:flex; align-items:center; gap:8px; }
+
+.icon-btn{
+  width:34px; height:34px; border-radius:10px;
+  display:grid; place-items:center;
+  background:#1b1b22; border:1px solid #2b2b33;
+  color:#cfd3ff; cursor:pointer;
+}
+.icon-btn:hover{ filter:brightness(1.05); }
+.icon-btn.danger{ color:#ff7979; }
+
+/* ========================= */
+/*            QR             */
+/* ========================= */
+.qr-box{ margin-top:12px; text-align:center; }
+.qr-link{ margin-top:8px; word-break:break-all; opacity:.8; font-size:12px; }
+
+/* Responsive tweak */
+@media (max-width: 1400px){
+  .grid-2{ grid-template-columns:1fr; }
+  .timer-block{ width:100%; }
+  .f-input{ width:100%; }
+}
