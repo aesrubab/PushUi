@@ -1,54 +1,114 @@
 import { getMessagingIfSupported } from "./firebase";
 import { getToken, deleteToken } from "firebase/messaging";
 
-const API   = import.meta.env.VITE_API_BASE as string;
+// VITE_API_BASE qoyulubsa (məs. https://localhost:7168) onu istifadə edirik,
+// qoyulmayıbsa "" qalır və Vite proxy işə düşür.
+const RAW_API = (import.meta.env.VITE_API_BASE as string) || "";
+const API = RAW_API.replace(/\/+$/, ""); // sondakı "/"-ları kəs
 const VAPID = import.meta.env.VITE_FB_VAPID_KEY as string;
 
-// SW qeydiyyatı ilə token alıb backend-ə yazır
-export async function subscribePush(lang = "az") {
+const STORAGE_KEY = "pushToken";
+
+// Lokal dev üçün NGROK başlığı lazım deyil
+const DEFAULT_HEADERS: Record<string, string> = {
+  "Content-Type": "application/json",
+};
+
+async function ensureSW(): Promise<ServiceWorkerRegistration> {
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing) return existing;
+
+  // public/ içində olmalıdır: public/firebase-messaging-sw.js
+  const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  await navigator.serviceWorker.ready;
+  return reg;
+}
+
+async function requestPermission() {
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") throw new Error("Bildiriş icazəsi verilmədi");
+}
+
+async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+
+  try {
+    const res = await fetch(`${API}${path}`, {
+      method: "POST",
+      headers: DEFAULT_HEADERS,
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`HTTP ${res.status}: ${text}`);
+    }
+
+    try {
+      return (await res.json()) as T;
+    } catch {
+      // cavab body boşdursa
+      return undefined as unknown as T;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** SW + FCM token alır və backend-ə subscribe edir */
+export async function subscribePush(lang = "az"): Promise<string> {
   const messaging = await getMessagingIfSupported();
   if (!messaging) throw new Error("Brauzer Web Push dəstəkləmir");
 
-  // Service Worker mütləq qeydiyyatdan keçsin
-  const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-
-  const perm = await Notification.requestPermission();
-  if (perm !== "granted") throw new Error("İcazə verilmədi");
+  await requestPermission();
+  const reg = await ensureSW();
 
   const token = await getToken(messaging, {
     vapidKey: VAPID,
     serviceWorkerRegistration: reg,
   });
-  if (!token) throw new Error("Token alına bilmədi");
+  if (!token) throw new Error("FCM token alına bilmədi");
 
-  localStorage.setItem("pushToken", token);
+  localStorage.setItem(STORAGE_KEY, token);
 
-  const r = await fetch(`${API}/api/push/subscribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, platform: navigator.userAgent, lang }),
+  await apiPost("/api/push/subscribe", {
+    token,
+    platform: navigator.userAgent,
+    lang,
   });
-  if (!r.ok) throw new Error(`subscribe failed (${r.status})`);
 
   return token;
 }
 
-// Köhnə adı saxlamaq üçün alias
+// Köhnə adla da istifadə olunsun
 export const enablePush = subscribePush;
 
-export async function disablePush() {
-  const token = localStorage.getItem("pushToken");
+/** Backend-ə unsubscribe edir və local FCM token-i silir */
+export async function disablePush(): Promise<void> {
+  const token = localStorage.getItem(STORAGE_KEY);
   if (!token) return;
 
-  const r = await fetch(`${API}/api/push/unsubscribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
-  if (!r.ok) throw new Error(`unsubscribe failed (${r.status})`);
+  await apiPost("/api/push/unsubscribe", { token });
 
   const messaging = await getMessagingIfSupported();
-  if (messaging) await deleteToken(messaging);
+  if (messaging) {
+    try {
+      await deleteToken(messaging);
+    } catch {
+      // ignore
+    }
+  }
+  localStorage.removeItem(STORAGE_KEY);
+}
 
-  localStorage.removeItem("pushToken");
+/** Backend-in əlçatanlığını yoxlamaq üçün */
+export async function pingApi(): Promise<boolean> {
+  try {
+    const r = await fetch(`${API}/_ping`, { headers: DEFAULT_HEADERS });
+    return r.ok;
+  } catch {
+    return false;
+  }
 }

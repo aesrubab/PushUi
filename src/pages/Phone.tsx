@@ -9,12 +9,42 @@ import Light3 from "../assets/Light3.png";
 import Wave65 from "../assets/65.png";
 import CallBell from "../assets/Call.png";
 
-/* PWA helpers */
 const isStandalone = () =>
   window.matchMedia?.("(display-mode: standalone)")?.matches ||
   (navigator as any).standalone === true;
 
 const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+
+type Lang = "az" | "en" | "ru";
+const I18N: Record<
+  Lang,
+  { tagline: string; subscribed: string; iosHint: string; language: string; shareTitle: string }
+> = {
+  az: {
+    tagline: "Məkanınıza işıqlıq və gözəllik qatın.",
+    subscribed: "Abunə olundu ✅",
+    iosHint:
+      "iOS-da push üçün əvvəl tətbiqi quraşdır: Safari → Paylaş → Ana ekrana əlavə et.",
+    language: "Dil",
+    shareTitle: "Elektro Mall",
+  },
+  en: {
+    tagline: "Add brightness and beauty to your space.",
+    subscribed: "Subscribed ✅",
+    iosHint:
+      "On iOS, install the app first to enable push: Safari → Share → Add to Home Screen.",
+    language: "Language",
+    shareTitle: "Elektro Mall",
+  },
+  ru: {
+    tagline: "Добавьте яркость и красоту вашему пространству.",
+    subscribed: "Подписались ✅",
+    iosHint:
+      "На iOS сначала установите приложение: Safari → Поделиться → На экран «Домой».",
+    language: "Язык",
+    shareTitle: "Elektro Mall",
+  },
+};
 
 type SLink = {
   id: string;
@@ -98,21 +128,21 @@ const socialLinks: SLink[] = [
 ];
 
 export default function Phone(){
-  const [status, setStatus] = useState<string>("");
+  const [subscribed, setSubscribed] = useState(false);
+  const [lang, setLang] = useState<Lang>("az");
+
   const installed = isStandalone();
   const isiOS = isIos();
 
-  useEffect(() => {
-    // iOS ipucu üçün statusu təmiz saxlayırıq
-  }, []);
+  useEffect(() => {}, []);
 
   async function enablePush(){
     try{
-      setStatus("İcazə istənilir…");
-      const token = await subscribePush();
-      setStatus("Abunə olundu ✅\n" + token);
-    }catch(e:any){
-      setStatus("Xəta: " + (e?.message ?? e));
+      await subscribePush();
+      setSubscribed(true);
+    }catch(e){
+      console.error(e); 
+      setSubscribed(false);
     }
   }
 
@@ -121,26 +151,23 @@ export default function Phone(){
     const url = window.location.href;
     try{
       if (navigator.share){
-        await navigator.share({ title:"Elektro Mall", text:"Məkanınıza işıqlıq və gözəllik qatın.", url });
+        await navigator.share({ title: I18N[lang].shareTitle, text: I18N[lang].tagline, url });
       }else{
         await navigator.clipboard.writeText(url);
         alert("Link panoya kopyalandı ✅");
       }
-    }catch{/* ignore */}
+    }catch{}
   }
 
   return (
     <div className="stage">
       <div className="phone">
-        {/* EM logo */}
         <img src={EmLogo} className="em-logo" alt="EM" />
 
-        {/* Lampalar — Figma koordinatları + qat sırası */}
         <img src={Light1} className="lamp lamp-1 swing" alt="" />
         <img src={Light2} className="lamp lamp-2 swing-slow" alt="" />
         <img src={Light3} className="lamp lamp-3" alt="" />
 
-        {/* Bildiriş zəngi — kliklə push icazəsi */}
         <img
           src={CallBell}
           className="bell-cta"
@@ -148,20 +175,19 @@ export default function Phone(){
           onClick={enablePush}
         />
 
-        {/* Başlıq + Tagline (Figma) */}
         <div className="title"><div>ELEKTRO</div><div>MALL</div></div>
-        <p className="tagline">Məkanınıza işıqlıq və gözəllik qatın.</p>
 
-        {/* Sosiallar — 4 + 5 düzülüşü */}
+        {subscribed && <div className="subscribed" role="status">{I18N[lang].subscribed}</div>}
+
+        <p className="tagline">{I18N[lang].tagline}</p>
+
         <div className="social-grid">
-          {/* 1-ci sətirdə 4 icon + ortada boş yer (xəttin simmetriyası üçün) */}
           <a className="gold-btn" href={socialLinks[0].href} aria-label={socialLinks[0].label}>{socialLinks[0].icon}</a>
           <a className="gold-btn" href={socialLinks[1].href} aria-label={socialLinks[1].label}>{socialLinks[1].icon}</a>
           <span className="spacer" aria-hidden="true" />
           <a className="gold-btn" href={socialLinks[2].href} aria-label={socialLinks[2].label}>{socialLinks[2].icon}</a>
           <a className="gold-btn" href={socialLinks[3].href} aria-label={socialLinks[3].label}>{socialLinks[3].icon}</a>
 
-          {/* 2-ci sətir — 5 icon */}
           <a className="gold-btn" href={socialLinks[4].href} aria-label={socialLinks[4].label}>{socialLinks[4].icon}</a>
           <a className="gold-btn" href={socialLinks[5].href} aria-label={socialLinks[5].label}>{socialLinks[5].icon}</a>
           <a className="gold-btn" href={socialLinks[6].href} aria-label={socialLinks[6].label}>{socialLinks[6].icon}</a>
@@ -169,25 +195,22 @@ export default function Phone(){
           <a className="gold-btn" href="#" onClick={shareSite} aria-label={socialLinks[8].label}>{socialLinks[8].icon}</a>
         </div>
 
-        {/* Status (xətalar, token və s.) */}
-        <pre className="status-text">{status}</pre>
-
-        {/* Footer + 65.png dalğa */}
         <div className="footer">Created by <b>WebOnly</b></div>
         <img src={Wave65} className="footer-wave" alt="" />
 
-        {/* Dil seçimi (maketdəki yer) */}
-        <select className="lang" defaultValue="az">
-          <option value="az">Dil</option>
+        <select
+          className="lang"
+          aria-label={I18N[lang].language}
+          value={lang}
+          onChange={(e) => setLang(e.target.value as Lang)}
+        >
+          <option value="az">AZ</option>
           <option value="en">EN</option>
           <option value="ru">RU</option>
         </select>
 
-        {/* iOS üçün kiçik ipucu */}
         {isiOS && !installed && (
-          <div className="ios-hint">
-            iOS-da push üçün əvvəl tətbiqi quraşdır: <b>Safari</b> → <b>Paylaş</b> → <b>Add to Home Screen</b>.
-          </div>
+          <div className="ios-hint">{I18N[lang].iosHint}</div>
         )}
       </div>
     </div>
