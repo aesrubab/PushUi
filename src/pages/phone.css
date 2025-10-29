@@ -106,7 +106,7 @@
 .bell-cta{
   position:absolute;
   width:60px; height:auto;
-  left:300px; top:135px;
+  left:290px; top:115px;
   transform: translateX(-50%);
   filter: drop-shadow(0 6px 12px rgba(255,220,120,.35));
   cursor:pointer;

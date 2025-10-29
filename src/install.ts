@@ -1,4 +1,3 @@
-// src/install.ts
 let deferredPrompt: any | null = null;
 type Listener = (canInstall: boolean) => void;
 let listeners: Listener[] = [];
