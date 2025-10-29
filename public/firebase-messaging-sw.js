@@ -25,3 +25,18 @@ self.addEventListener("notificationclick", (e) => {
   const url = e.notification?.data?.url || "/";
   e.waitUntil(clients.openWindow(url));
 });
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data?.json() || {}; } catch {}
+  const title = data.title || "Bildiriş";
+  const body  = data.body  || "";
+  const icon  = data.icon  || "/icons/icon-192.png";
+  const url   = data.url   || "/";
+
+  event.waitUntil(self.registration.showNotification(title, { body, icon, data: { url } }));
+
+  event.waitUntil((async () => {
+    const clientsList = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+    clientsList.forEach(c => c.postMessage({ type: "NEW_NOTIFICATION" }));
+  })());
+});

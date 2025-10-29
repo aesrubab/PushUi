@@ -232,3 +232,143 @@ body{ color:var(--text); }
 @media (max-width: 720px){
   .stat-card{ --right-art-w: 120px; --right-art-fade: 22px; }
 }
+/* ===== THEME (Qara + Sarı) ===== */
+:root{
+  --gold:#FDC800; --gold-2:#FFC83D; --gold-3:#A07B00;
+  --ink:#0A0B0D; --panel:#121318; --panel-2:#0E0F13;
+  --stroke:rgba(255,255,255,.10); --muted:#cfd7ff;
+}
+html,body{height:100%; margin:0; background:#0a0b0d;}
+.darkgold { background:#0a0b0d; color:#eaf0ff; }
+
+/* ===== Background + Centering (desktop & tablet mərkəz) ===== */
+.login-wrap{
+  position: fixed;          /* parent məhdudiyyətlərini ləğv edir */
+  inset: 0;                 /* top/right/bottom/left = 0 */
+  width: 100vw;
+  height: 100dvh;           /* iOS/Android üçün real viewport */
+  display: grid;
+  place-items: center;      /* desktop + tablet → tam mərkəz */
+  overflow: hidden;
+  background: #0a0b0d;      /* arxa fon boş yerləri doldursun */
+}
+.login-bg{
+  position:absolute; inset:-20%;
+  background:
+    radial-gradient(900px 600px at 15% 0%, rgba(253,200,0,.18), transparent 60%),
+    radial-gradient(1000px 700px at 85% 100%, rgba(253,200,0,.10), transparent 60%);
+  filter: blur(50px);
+  z-index:0;
+}
+
+.login-card{
+  position:relative; z-index:1;
+  width:min(420px,92vw);
+  padding:22px 20px;
+  border-radius:18px;
+  color:#f7fbff;
+  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  border:1px solid var(--stroke);
+  box-shadow:0 24px 60px rgba(0,0,0,.45);
+}
+.login-card.gold{
+  box-shadow:
+    0 24px 60px rgba(0,0,0,.45),
+    0 0 0 1px rgba(253,200,0,.08) inset;
+}
+
+.login-head{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.login-logo{
+  width:48px; height:48px; border-radius:14px; position:relative;
+  display:grid; place-items:center; overflow:hidden;
+  background:#0d0f14;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
+}
+.login-logo::after{
+  content:""; position:absolute; inset:-1px; border-radius:14px;
+  background:linear-gradient(135deg, var(--gold), transparent 60%);
+  opacity:.25; pointer-events:none;
+}
+.login-logo img{ width:70%; height:70%; object-fit:contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,.45)); }
+
+.login-title h2{ margin:0; font-size:20px; }
+.login-title p{ margin:2px 0 0; opacity:.7; font-size:13px; }
+
+.f{ display:grid; gap:6px; font-size:14px; margin:12px 0; }
+.f input{
+  width:100%; padding:12px 12px; border-radius:12px;
+  border:1px solid rgba(255,255,255,.14); background:#0e1016;
+  color:#fff; outline:none;
+}
+.f input:focus{
+  border-color:var(--gold);
+  box-shadow:0 0 0 3px rgba(253,200,0,.25);
+}
+
+.pwd{ position:relative; }
+.pwd input{ padding-right:42px; }
+.pwd .eye{
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  width:34px; height:34px; border:0; border-radius:10px;
+  color:#d9e2ff; background:transparent; cursor:pointer;
+}
+.pwd .eye:hover{ background:rgba(255,255,255,.06); color:#fff; }
+
+.alert{
+  margin:8px 0 2px; font-size:13px;
+  color:#2b1a00; background:rgba(253,200,0,.25);
+  border:1px solid rgba(253,200,0,.45);
+  padding:8px 10px; border-radius:10px;
+}
+
+.login-btn{
+  width:100%; margin-top:10px; padding:12px 14px;
+  border-radius:12px; border:0; font-weight:800; letter-spacing:.2px;
+  color:#1a1200; background:linear-gradient(180deg, var(--gold) 0%, var(--gold-2) 100%);
+  box-shadow:0 12px 28px rgba(253,200,0,.25), inset 0 0 0 1px rgba(255,255,255,.15);
+  cursor:pointer;
+}
+.login-btn:hover{ filter:brightness(1.06); }
+.login-btn:disabled{ opacity:.65; cursor:default; }
+
+.spinner{
+  display:inline-block; width:18px; height:18px;
+  border:2px solid rgba(0,0,0,.25); border-top-color:#1a1200;
+  border-radius:50%; animation:spin .9s linear infinite;
+}
+@keyframes spin { to{ transform:rotate(360deg); } }
+
+.login-foot{ margin-top:12px; text-align:center; font-size:12px; opacity:.65; }
+
+/* ===== Mobile UI (<=640px): tam eni, aşağı “sheet” ===== */
+/* ===== Mobile UI (<=640px): sheet, amma bir qədər yuxarı qaldırılıb ===== */
+@media (max-width:640px){
+  .login-wrap{
+    /* aşağıda yox, bir az YÜKSƏKDƏ dayansın */
+    --lift: 50vh; /* nə qədər qaldırmaq istəsən, 5–10vh arası dəyişə bilər */
+    align-items: end;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(14px, env(safe-area-inset-right))
+      calc(max(18px, env(safe-area-inset-bottom)) + var(--lift))
+      max(14px, env(safe-area-inset-left));
+  }
+
+  .login-card{
+    width:100%;
+    border-radius:16px 16px 14px 14px;
+    padding:20px 16px;
+    backdrop-filter:saturate(1.2) blur(6px);
+    box-shadow:0 18px 40px rgba(0,0,0,.55);
+  }
+}
+
+/* Tablet + Desktop artırma */
+@media (min-width:1600px){
+  .login-card{ transform:scale(1.05); }
+}
+
+/* Admin layout (toxunulmayıb) */
+.admin-layout{ min-height:100vh; background:#06090f; color:#e5e7eb; }
+.admin-top{ display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #1f2937; position:sticky; top:0; background:#0b1220; }
+.admin-content{ padding:16px; }

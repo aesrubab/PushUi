@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import "./admin.css";
 import { QRCodeCanvas } from "qrcode.react";
 import HeaderImg from "../assets/HEADER.png";
-
-const RAW = (import.meta.env.VITE_API_BASE as string) || "";
-const API = RAW ? RAW.replace(/\/+$/, "") : "";
-const api = (p: string) => `${API}${p}`;
-const JSON_HEADERS = { "Content-Type": "application/json" };
+import { API, get, post } from "../lib/api";
+import { clearToken } from "../lib/auth";
+import { useNavigate } from "react-router-dom";
 
 type Stats = { qr: number; subs: number; sent: number; clicks: number; ctr: number };
 type Campaign = {
@@ -42,15 +40,6 @@ function nowLocalPlus(mins = 5) {
   return localInputFromDate(new Date(Date.now() + mins * 60_000));
 }
 
-async function jsonFetch<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, init);
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(text || `HTTP ${res.status}`);
-  }
-  try { return (await res.json()) as T; } catch { return undefined as unknown as T; }
-}
-
 function Pager({
   page, total, onPrev, onNext,
 }: { page: number; total: number; onPrev(): void; onNext(): void; }) {
@@ -72,6 +61,8 @@ function Pager({
 }
 
 export default function Admin() {
+  const navigate = useNavigate();
+
   const [stats, setStats] = useState<Stats | null>(null);
 
   const [sentList, setSentList] = useState<Campaign[]>([]);
@@ -89,22 +80,44 @@ export default function Admin() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function loadStats() {
-    try { setStats(await jsonFetch<Stats>(api("/api/push/stats"))); }
-    catch { setStats({ qr:0, subs:0, sent:0, clicks:0, ctr:0 }); }
+  function bumpToLoginIf401(e: any) {
+    if (e?.message === "Unauthorized") {
+      clearToken();
+      navigate("/admin/login", { replace: true });
+      return true;
+    }
+    return false;
   }
+
+  async function loadStats() {
+    try {
+      setStats(await get<Stats>("/api/push/stats"));
+    } catch (e: any) {
+      if (bumpToLoginIf401(e)) return;
+      setStats({ qr: 0, subs: 0, sent: 0, clicks: 0, ctr: 0 });
+    }
+  }
+
   async function loadCampaigns() {
     try {
       const [p, s] = await Promise.all([
-        jsonFetch<Campaign[]>(api("/api/push/campaigns?state=pending&take=50")),
-        jsonFetch<Campaign[]>(api("/api/push/campaigns?state=sent&take=50")),
+        get<Campaign[]>("/api/push/campaigns?state=pending&take=50"),
+        get<Campaign[]>("/api/push/campaigns?state=sent&take=50"),
       ]);
-      setPendingList(p || []); setSentList(s || []);
-      setPendingPage(0); setSentPage(0);
-    } catch { setPendingList([]); setSentList([]); }
+      setPendingList(p || []);
+      setSentList(s || []);
+      setPendingPage(0);
+      setSentPage(0);
+    } catch (e: any) {
+      if (bumpToLoginIf401(e)) return;
+      setPendingList([]);
+      setSentList([]);
+    }
   }
+
   useEffect(() => {
-    loadStats(); loadCampaigns();
+    loadStats();
+    loadCampaigns();
     const id = setInterval(() => loadCampaigns(), 10_000);
     return () => clearInterval(id);
   }, []);
@@ -119,72 +132,102 @@ export default function Admin() {
     if (!form.title || !form.body) return;
     setLoading(true);
     try {
-      await jsonFetch(api("/api/push/send-now"), {
-        method: "POST", headers: JSON_HEADERS,
-        body: JSON.stringify({ title: form.title, body: form.body, url: form.url || "/" }),
+      await post("/api/push/send-now", {
+        title: form.title,
+        body: form.body,
+        url: form.url || "/",
       });
       alert("Göndərildi");
       await Promise.all([loadStats(), loadCampaigns()]);
-    } catch (e: any) { alert(`Xəta: ${e?.message || e}`); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      if (bumpToLoginIf401(e)) return;
+      alert(`Xəta: ${e?.message || e}`);
+    } finally {
+      setLoading(false);
+    }
   }
+
   async function scheduleOrUpdate() {
-    if (!form.sendAtLocal) { alert("Göndərmə vaxtını seçin"); return; }
+    if (!form.sendAtLocal) {
+      alert("Göndərmə vaxtını seçin");
+      return;
+    }
     if (form.expiresAtLocal) {
       if (new Date(form.expiresAtLocal) <= new Date(form.sendAtLocal)) {
-        alert("Expire vaxtı Send vaxtından böyük olmalıdır"); return;
+        alert("Expire vaxtı Send vaxtından böyük olmalıdır");
+        return;
       }
     }
     setLoading(true);
     try {
       if (editingId) {
         const payload: any = {
-          title: form.title, body: form.body, url: form.url,
+          title: form.title,
+          body: form.body,
+          url: form.url,
           sendAtUtc: toUtcIso(form.sendAtLocal),
         };
         if (form.expiresAtLocal) payload.expiresAtUtc = toUtcIso(form.expiresAtLocal);
-        await jsonFetch(api(`/api/push/${editingId}`), {
-          method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(payload),
-        });
+        await post(`/api/push/${editingId}`, payload); // server PUT dəstəkləyirsə uyğunlaşdırın
         alert("Yeniləndi");
       } else {
-        await jsonFetch(api("/api/push/schedule"), {
-          method: "POST", headers: JSON_HEADERS,
-          body: JSON.stringify({
-            title: form.title, body: form.body, url: form.url,
-            sendAtUtc: toUtcIso(form.sendAtLocal),
-            expiresAtUtc: form.expiresAtLocal ? toUtcIso(form.expiresAtLocal) : null,
-          }),
+        await post("/api/push/schedule", {
+          title: form.title,
+          body: form.body,
+          url: form.url,
+          sendAtUtc: toUtcIso(form.sendAtLocal),
+          expiresAtUtc: form.expiresAtLocal ? toUtcIso(form.expiresAtLocal) : null,
         });
         alert("Planlandı");
       }
       await Promise.all([loadStats(), loadCampaigns()]);
       resetForm();
-    } catch (e: any) { alert(`Xəta: ${e?.message || e}`); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      if (bumpToLoginIf401(e)) return;
+      alert(`Xəta: ${e?.message || e}`);
+    } finally {
+      setLoading(false);
+    }
   }
+
   function resetForm() {
     setEditingId(null);
-    setForm({ title:"", body:"", url:"/kampaniya", sendAtLocal: nowLocalPlus(5), expiresAtLocal:"" });
+    setForm({ title: "", body: "", url: "/kampaniya", sendAtLocal: nowLocalPlus(5), expiresAtLocal: "" });
   }
+
   function startEdit(c: Campaign) {
     setEditingId(c.id);
     setForm({
-      title: c.title, body: c.body, url: c.url ?? "/",
+      title: c.title,
+      body: c.body,
+      url: c.url ?? "/",
       sendAtLocal: toInputLocalValue(c.scheduledAtUtc),
       expiresAtLocal: toInputLocalValue(c.expiresAtUtc),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
   async function cancelCampaign(id: number) {
     if (!confirm("Bu planı ləğv etmək istəyirsiniz?")) return;
     setLoading(true);
-    try { await jsonFetch(api(`/api/push/${id}/cancel`), { method:"POST" }); await loadCampaigns(); if (editingId === id) resetForm(); }
-    catch (e: any) { alert(`Xəta: ${e?.message || e}`); }
-    finally { setLoading(false); }
+    try {
+      await post(`/api/push/${id}/cancel`, {});
+      await loadCampaigns();
+      if (editingId === id) resetForm();
+    } catch (e: any) {
+      if (bumpToLoginIf401(e)) return;
+      alert(`Xəta: ${e?.message || e}`);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const qrUrl = api("/api/qr/open?to=/");
+  function logout() {
+    clearToken();
+    navigate("/admin/login", { replace: true });
+  }
+
+  const qrUrl = `${API}/api/qr/open?to=/`;
   const canSendNow = !!form.title && !!form.body;
   const canSchedule = canSendNow && !!form.sendAtLocal;
 
@@ -193,6 +236,7 @@ export default function Admin() {
       <div className="board">
         <div className="header">
           <img src={HeaderImg} alt="Webonly — Digital Web Studio" className="header-img" />
+          <button className="logout-btn" onClick={logout} title="Çıxış">Logout</button>
         </div>
 
         <div className="stat-row">
@@ -203,7 +247,6 @@ export default function Admin() {
 
         <div className="group">
           <div className="grid-2">
-            {/* LEFT */}
             <div className="panel form-panel">
               <h3 className="section-title">Notification Message</h3>
 
@@ -380,3 +423,5 @@ function StatCard({ title, value, className="" }:{title:string; value:number; cl
     </div>
   );
 }
+
+

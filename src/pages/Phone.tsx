@@ -1,6 +1,8 @@
+// src/pages/Phone.tsx
 import "./phone.css";
 import { useEffect, useState, type ReactNode, type MouseEvent } from "react";
 import { subscribePush } from "../push";
+import { fetchUnreadCount, fetchNotifications, markRead, type Noti } from "../lib/notifyApi";
 
 import EmLogo from "../assets/EmLogo.png";
 import Light1 from "../assets/Light1.png";
@@ -133,10 +135,38 @@ export default function Phone(){
   const [lang, setLang] = useState<Lang>("az");
   const [overlay, setOverlay] = useState<null | "wa" | "phone">(null);
 
+  // NEW: bildiriş state-ləri
+  const [unread, setUnread] = useState(0);
+  const [notis, setNotis] = useState<Noti[]>([]);
+  const [notiOpen, setNotiOpen] = useState(false);
+  const [notiPage, setNotiPage] = useState(1);
+  const [notiTotal, setNotiTotal] = useState(0);
+
   const installed = isStandalone();
   const isiOS = isIos();
 
-  useEffect(() => {}, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const c = await fetchUnreadCount();
+        setUnread(c);
+        const res = await fetchNotifications(1, 20);
+        setNotis(res.items);
+        setNotiTotal(res.total);
+        setNotiPage(1);
+      } catch {}
+    })();
+
+    if (navigator.serviceWorker) {
+      const onMsg = (e: MessageEvent) => {
+        if (e.data?.type === "NEW_NOTIFICATION") {
+          setUnread(u => u + 1);
+        }
+      };
+      navigator.serviceWorker.addEventListener("message", onMsg);
+      return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+    }
+  }, []);
 
   async function enablePush(){
     try{
@@ -177,6 +207,31 @@ export default function Phone(){
     }
   }
 
+  // NEW: sheet açıb, görünənləri oxundu işarələ
+  async function openNotiSheet(){
+    try {
+      const res = await fetchNotifications(1, 20);
+      setNotis(res.items);
+      setNotiTotal(res.total);
+      setNotiPage(1);
+      await markRead(res.items.filter(n => !n.isRead).map(n => n.id));
+      setUnread(0);
+      setNotis(s => s.map(n => ({...n, isRead:true})));
+    } catch {}
+    setNotiOpen(true);
+  }
+
+  // NEW: load more
+  async function loadMore(){
+    const next = notiPage + 1;
+    try {
+      const res = await fetchNotifications(next, 20);
+      setNotis(s => [...s, ...res.items]);
+      setNotiPage(next);
+      await markRead(res.items.filter(n => !n.isRead).map(n => n.id));
+    } catch {}
+  }
+
   return (
     <div className="stage">
       <div className="phone">
@@ -186,12 +241,24 @@ export default function Phone(){
         <img src={Light2} className="lamp lamp-2 swing-slow" alt="" />
         <img src={Light3} className="lamp lamp-3" alt="" />
 
-        <img
-          src={CallBell}
-          className="bell-cta"
-          alt={I18N[lang].bellAlt}
-          onClick={enablePush}
-        />
+        {/* NEW: bell + badge (mövcud onClick qorunur) */}
+        <div className="bell-wrap">
+          <img
+            src={CallBell}
+            className="bell-cta"
+            alt={I18N[lang].bellAlt}
+            onClick={enablePush}
+          />
+          {unread > 0 && (
+            <span
+              className="noti-badge"
+              onClick={(e)=>{ e.stopPropagation(); openNotiSheet(); }}
+              title="Bildirişlər"
+            >
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
+        </div>
 
         <div className="title"><div>ELEKTRO</div><div>MALL</div></div>
 
@@ -282,6 +349,37 @@ export default function Phone(){
               </div>
 
               <div className="close" onClick={()=>setOverlay(null)}>{I18N[lang].close}</div>
+            </div>
+          </div>
+        )}
+
+        {/* NEW: Bildiriş sheet – overlay-lə yanaşı işləyir */}
+        {notiOpen && (
+          <div className="overlay" onClick={()=>setNotiOpen(false)}>
+            <div className="sheet" onClick={(e)=>e.stopPropagation()}>
+              <h3>Bildirişlər</h3>
+
+              <div className="noti-list">
+                {notis.length === 0 ? (
+                  <div className="empty">Hələ bildiriş yoxdur</div>
+                ) : (
+                  notis.map(n => (
+                    <a key={n.id} className={`noti-item ${n.isRead ? "is-read" : ""}`} href={n.url || "#"}>
+                      <div className="noti-top">
+                        <b className="noti-title">{n.title}</b>
+                        <span className="noti-time">{new Date(n.createdAt).toLocaleString()}</span>
+                      </div>
+                      <div className="noti-body">{n.body}</div>
+                    </a>
+                  ))
+                )}
+              </div>
+
+              {(notis.length < notiTotal) && (
+                <button className="gold-btn more" onClick={loadMore}>Daha çox</button>
+              )}
+
+              <div className="close" onClick={()=>setNotiOpen(false)}>{I18N[lang].close}</div>
             </div>
           </div>
         )}

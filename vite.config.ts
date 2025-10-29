@@ -6,13 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Bütün API çağırışları
       "/api": {
         target: "https://localhost:7168",
         changeOrigin: true,
-        secure: false, // dev cert üçündür
+        secure: false, 
       },
-      // Sağlamlıq yoxlaması
       "/_ping": {
         target: "https://localhost:7168",
         changeOrigin: true,

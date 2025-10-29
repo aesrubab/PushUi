@@ -1,38 +1,36 @@
+// src/push.ts
 import { getMessagingIfSupported } from "./firebase";
 import { getToken, deleteToken } from "firebase/messaging";
 
-// VITE_API_BASE qoyulubsa (məs. https://localhost:7168) onu istifadə edirik,
-// qoyulmayıbsa "" qalır və Vite proxy işə düşür.
+/* ====== API əsasları ====== */
 const RAW_API = (import.meta.env.VITE_API_BASE as string) || "";
 const API = RAW_API.replace(/\/+$/, ""); // sondakı "/"-ları kəs
 const VAPID = import.meta.env.VITE_FB_VAPID_KEY as string;
 
-const STORAGE_KEY = "pushToken";
+const STORAGE_TOKEN = "pushToken";
+const STORAGE_DEVICE = "em_device_id"; // <<< deviceId burda saxlanır
 
-// Lokal dev üçün NGROK başlığı lazım deyil
 const DEFAULT_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
 };
 
-/* ====================== Köməkçi detektorlar ====================== */
+/* ====== Köməkçi detektorlar ====== */
 function isStandalone() {
   return (
     window.matchMedia?.("(display-mode: standalone)")?.matches ||
-    // iOS Safari xüsusi flag
     (navigator as any).standalone === true
   );
 }
-
 function isIos() {
   return /iPhone|iPad|iPod/.test(navigator.userAgent);
 }
 
-/* ====================== SW təminatı ====================== */
+/* ====== SW təminatı ====== */
 async function ensureSW(): Promise<ServiceWorkerRegistration> {
   const existing = await navigator.serviceWorker.getRegistration();
   if (existing) return existing;
 
-  // public/ içində olmalıdır: public/firebase-messaging-sw.js (root scope)
+  // public/firebase-messaging-sw.js (root scope)
   const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
     scope: "/",
   });
@@ -40,21 +38,29 @@ async function ensureSW(): Promise<ServiceWorkerRegistration> {
   return reg;
 }
 
-/* ====================== İcazə istəyi ====================== */
+/* ====== İcazə ====== */
 async function requestPermission() {
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error("Bildiriş icazəsi verilmədi");
 }
 
-/* ====================== API helper ====================== */
+/* ====== API helper ====== */
 async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
 
   try {
+    // deviceId varsa, avtomatik başlığa əlavə et
+    const deviceId = localStorage.getItem(STORAGE_DEVICE) || "";
+    const headers: Record<string, string> = {
+      ...DEFAULT_HEADERS,
+      ...(deviceId ? { "X-Device-Id": deviceId } : {}),
+    };
+
     const res = await fetch(`${API}${path}`, {
       method: "POST",
-      headers: DEFAULT_HEADERS,
+      headers,
+      credentials: "include", // cookie/JWT üçün
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
@@ -67,7 +73,6 @@ async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
     try {
       return (await res.json()) as T;
     } catch {
-      // cavab body boşdursa
       return undefined as unknown as T;
     }
   } finally {
@@ -75,21 +80,31 @@ async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
   }
 }
 
-/* ====================== Public API ====================== */
+/* ====== Public API ====== */
 
-/** SW + FCM token alır və backend-ə subscribe edir */
-export async function subscribePush(lang = "az"): Promise<string> {
+type SubscribeResponse = {
+  ok: boolean;
+  deviceId?: string;   // backend PushController.Subscribe göndərir
+  isNew?: boolean;
+};
+
+/** SW + FCM token alır və backend-ə subscribe edir; deviceId-i də saxlayır */
+export async function subscribePush(lang = "az"): Promise<{ token: string; deviceId?: string }> {
   const messaging = await getMessagingIfSupported();
   if (!messaging) throw new Error("Brauzer Web Push dəstəkləmir");
 
-  // ✅ iOS: yalnız PWA (standalone) rejimində push mümkündür.
+  if (!VAPID) {
+    throw new Error("VAPID açarı tapılmadı (VITE_FB_VAPID_KEY).");
+  }
+
+  // iOS yalnız PWA (standalone) rejimində icazə verir
   if (isIos() && !isStandalone()) {
     throw new Error(
       "iOS: Əvvəl Safari → Paylaş → 'Ana ekrana əlavə et' ilə tətbiqi quraşdır, sonra bildiriş icazəsi ver."
     );
   }
 
-  // ✅ HTTPS tələbi (localhost istisna)
+  // HTTPS (localhost istisna)
   if (
     location.protocol !== "https:" &&
     location.hostname !== "localhost" &&
@@ -101,50 +116,76 @@ export async function subscribePush(lang = "az"): Promise<string> {
   await requestPermission();
   const reg = await ensureSW();
 
-  const token = await getToken(messaging, {
-    vapidKey: VAPID,
-    serviceWorkerRegistration: reg,
-  });
+  let token: string | null = null;
+  try {
+    token = await getToken(messaging, {
+      vapidKey: VAPID,
+      serviceWorkerRegistration: reg,
+    });
+  } catch (e: any) {
+    console.error("FCM getToken error:", e);
+    throw new Error(
+      "FCM token alınmadı. Zəhmət olmasa .env (.env.local) faylındakı VITE_FB_* dəyərlərinin Firebase Project ilə eyni olduğuna əmin ol."
+    );
+  }
+
   if (!token) throw new Error("FCM token alına bilmədi");
 
-  localStorage.setItem(STORAGE_KEY, token);
+  localStorage.setItem(STORAGE_TOKEN, token);
 
-  await apiPost("/api/push/subscribe", {
+  // Backend-ə qeydiyyat
+  const resp = await apiPost<SubscribeResponse>("/api/push/subscribe", {
     token,
-    platform: navigator.userAgent,
+    platform: "web",
     lang,
   });
 
-  return token;
+  // deviceId gəlibsə yadda saxla
+  if (resp?.deviceId) {
+    localStorage.setItem(STORAGE_DEVICE, resp.deviceId);
+  }
+
+  return { token, deviceId: resp?.deviceId };
 }
 
-// Köhnə adla da istifadə olunsun
+// Köhnə adla uyğunluq
 export const enablePush = subscribePush;
 
-/** Backend-ə unsubscribe edir və local FCM token-i silir */
+/** Backend-ə unsubscribe edir və local FCM token-i/deviceId-i silir */
 export async function disablePush(): Promise<void> {
-  const token = localStorage.getItem(STORAGE_KEY);
-  if (!token) return;
-
-  await apiPost("/api/push/unsubscribe", { token });
+  const token = localStorage.getItem(STORAGE_TOKEN);
+  try {
+    if (token) {
+      await apiPost("/api/push/unsubscribe", { token });
+    }
+  } catch {
+    // ignore network error
+  }
 
   const messaging = await getMessagingIfSupported();
   if (messaging) {
-    try {
-      await deleteToken(messaging);
-    } catch {
-      // ignore
-    }
+    try { await deleteToken(messaging); } catch {}
   }
-  localStorage.removeItem(STORAGE_KEY);
+
+  localStorage.removeItem(STORAGE_TOKEN);
+  // deviceId-i də silmək istəyirsənsə, bunu da aç:
+  // localStorage.removeItem(STORAGE_DEVICE);
 }
 
 /** Backend-in əlçatanlığını yoxlamaq üçün */
 export async function pingApi(): Promise<boolean> {
   try {
-    const r = await fetch(`${API}/_ping`, { headers: DEFAULT_HEADERS });
+    const r = await fetch(`${API}/_ping`, { headers: DEFAULT_HEADERS, credentials: "include" });
     return r.ok;
   } catch {
     return false;
   }
+}
+
+/** Saxlanmış token/deviceId oxumaq üçün util (istəyə bağlı) */
+export function getStoredPushIdentity() {
+  return {
+    token: localStorage.getItem(STORAGE_TOKEN) || null,
+    deviceId: localStorage.getItem(STORAGE_DEVICE) || null,
+  };
 }
