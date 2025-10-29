@@ -14,21 +14,39 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
 };
 
+/* ====================== Köməkçi detektorlar ====================== */
+function isStandalone() {
+  return (
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    // iOS Safari xüsusi flag
+    (navigator as any).standalone === true
+  );
+}
+
+function isIos() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent);
+}
+
+/* ====================== SW təminatı ====================== */
 async function ensureSW(): Promise<ServiceWorkerRegistration> {
   const existing = await navigator.serviceWorker.getRegistration();
   if (existing) return existing;
 
-  // public/ içində olmalıdır: public/firebase-messaging-sw.js
-  const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  // public/ içində olmalıdır: public/firebase-messaging-sw.js (root scope)
+  const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+    scope: "/",
+  });
   await navigator.serviceWorker.ready;
   return reg;
 }
 
+/* ====================== İcazə istəyi ====================== */
 async function requestPermission() {
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw new Error("Bildiriş icazəsi verilmədi");
 }
 
+/* ====================== API helper ====================== */
 async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
@@ -57,10 +75,28 @@ async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
   }
 }
 
+/* ====================== Public API ====================== */
+
 /** SW + FCM token alır və backend-ə subscribe edir */
 export async function subscribePush(lang = "az"): Promise<string> {
   const messaging = await getMessagingIfSupported();
   if (!messaging) throw new Error("Brauzer Web Push dəstəkləmir");
+
+  // ✅ iOS: yalnız PWA (standalone) rejimində push mümkündür.
+  if (isIos() && !isStandalone()) {
+    throw new Error(
+      "iOS: Əvvəl Safari → Paylaş → 'Ana ekrana əlavə et' ilə tətbiqi quraşdır, sonra bildiriş icazəsi ver."
+    );
+  }
+
+  // ✅ HTTPS tələbi (localhost istisna)
+  if (
+    location.protocol !== "https:" &&
+    location.hostname !== "localhost" &&
+    location.hostname !== "127.0.0.1"
+  ) {
+    throw new Error("Service Worker üçün HTTPS tələb olunur.");
+  }
 
   await requestPermission();
   const reg = await ensureSW();
