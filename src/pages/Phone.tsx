@@ -168,15 +168,18 @@ export default function Phone(){
     }
   }, []);
 
-  async function enablePush(){
-    try{
-      await subscribePush();
-      setSubscribed(true);
-    }catch(e){
-      console.error(e);
-      setSubscribed(false);
-    }
+ async function enablePush(){
+  try{
+    await subscribePush();
+    setSubscribed(true);
+    alert("Abunə olundu ✅");
+  }catch(e:any){
+    console.error("enablePush error:", e);
+    alert("Bildiriş aktiv edilə bilmədi: " + (e?.message || "Unknown error"));
+    setSubscribed(false);
   }
+}
+
 
   async function shareSite(e: MouseEvent<HTMLAnchorElement>){
     e.preventDefault();

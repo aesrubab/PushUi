@@ -25,13 +25,15 @@ self.addEventListener("notificationclick", (e) => {
   const url = e.notification?.data?.url || "/";
   e.waitUntil(clients.openWindow(url));
 });
+console.log("event clicked")
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data?.json() || {}; } catch {}
   const title = data.title || "Bildiriş";
   const body  = data.body  || "";
   const icon  = data.icon  || "/icons/icon-192.png";
-  const url   = data.url   || "/";
+  const url   = data.url   || "/"; 
+  console.log(`Data: ${data}`);
 
   event.waitUntil(self.registration.showNotification(title, { body, icon, data: { url } }));
 

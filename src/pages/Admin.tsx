@@ -137,6 +137,7 @@ export default function Admin() {
         body: form.body,
         url: form.url || "/",
       });
+      
       alert("Göndərildi");
       await Promise.all([loadStats(), loadCampaigns()]);
     } catch (e: any) {

@@ -89,6 +89,7 @@ type SubscribeResponse = {
 };
 
 /** SW + FCM token alır və backend-ə subscribe edir; deviceId-i də saxlayır */
+// --- Replace existing subscribePush with this improved implementation ---
 export async function subscribePush(lang = "az"): Promise<{ token: string; deviceId?: string }> {
   const messaging = await getMessagingIfSupported();
   if (!messaging) throw new Error("Brauzer Web Push dəstəkləmir");
@@ -131,22 +132,52 @@ export async function subscribePush(lang = "az"): Promise<{ token: string; devic
 
   if (!token) throw new Error("FCM token alına bilmədi");
 
+  // --- NEW: quick sanity checks to avoid sending wrong tokens (JWT etc) ---
+  const sample = token.slice(0, 120);
+  console.log("[push] got fcm token sample:", sample);
+
+  // If token looks like a JWT (three dot-separated base64 parts), block and notify
+  if (/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/.test(token)) {
+    // don't send JWT-like tokens to subscribe endpoint
+    console.error("[push] token looks like a JWT — refusing to send to /api/push/subscribe");
+    throw new Error("Aldığımız token düzgün formatda deyil (JWT kimi görünür). Konsolda token sample-ı yoxla.");
+  }
+
+  // basic length check
+  if (token.length < 20) {
+    console.error("[push] token too short:", token.length);
+    throw new Error("Aldığımız token çox qısadır; subscribe prosesi uğursuz oldu.");
+  }
+
+  // persist locally (so we don't POST repeatedly)
   localStorage.setItem(STORAGE_TOKEN, token);
 
   // Backend-ə qeydiyyat
-  const resp = await apiPost<SubscribeResponse>("/api/push/subscribe", {
-    token,
-    platform: "web",
-    lang,
-  });
+  // Use absolute API (make sure env VITE_API_BASE is correct in production)
+  try {
+    const resp = await apiPost<SubscribeResponse>("/api/push/subscribe", {
+      token,
+      platform: "web",
+      lang,
+    });
 
-  // deviceId gəlibsə yadda saxla
-  if (resp?.deviceId) {
-    localStorage.setItem(STORAGE_DEVICE, resp.deviceId);
+    if (resp?.deviceId) {
+      localStorage.setItem(STORAGE_DEVICE, resp.deviceId);
+      console.log("[push] subscribed ok, deviceId:", resp.deviceId);
+    } else {
+      console.log("[push] subscribed ok, no deviceId returned");
+    }
+
+    return { token, deviceId: resp?.deviceId };
+  } catch (e: any) {
+    // If server responded that token invalid, clear local stored token to allow retry later
+    console.error("[push] subscribe POST failed:", e?.message || e);
+    // optionally remove saved token so next attempt re-creates
+    localStorage.removeItem(STORAGE_TOKEN);
+    throw e;
   }
-
-  return { token, deviceId: resp?.deviceId };
 }
+
 
 // Köhnə adla uyğunluq
 export const enablePush = subscribePush;
