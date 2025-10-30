@@ -158,13 +158,13 @@ export default function Phone(){
     })();
 
     if (navigator.serviceWorker) {
-      const onMsg = (e: MessageEvent) => {
-        if (e.data?.type === "NEW_NOTIFICATION") {
-          setUnread(u => u + 1);
-        }
-      };
-      navigator.serviceWorker.addEventListener("message", onMsg);
-      return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === "NEW_NOTIFICATION") {
+        setUnread(u => u + 1);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
     }
   }, []);
 

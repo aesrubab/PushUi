@@ -4,11 +4,11 @@ import { getToken, deleteToken } from "firebase/messaging";
 
 /* ====== API əsasları ====== */
 const RAW_API = (import.meta.env.VITE_API_BASE as string) || "";
-const API = RAW_API.replace(/\/+$/, ""); // sondakı "/"-ları kəs
+const API = RAW_API.replace(/\/+$/, "");
 const VAPID = import.meta.env.VITE_FB_VAPID_KEY as string;
 
 const STORAGE_TOKEN = "pushToken";
-const STORAGE_DEVICE = "em_device_id"; // <<< deviceId burda saxlanır
+const STORAGE_DEVICE = "em_device_id";
 
 const DEFAULT_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
@@ -27,13 +27,12 @@ function isIos() {
 
 /* ====== SW təminatı ====== */
 async function ensureSW(): Promise<ServiceWorkerRegistration> {
-  const existing = await navigator.serviceWorker.getRegistration();
-  if (existing) return existing;
-
-  // public/firebase-messaging-sw.js (root scope)
+  // ✅ hər dəfə yenidən register et (deploy üçün vacib)
   const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
     scope: "/",
   });
+
+  await reg.update().catch(() => {});
   await navigator.serviceWorker.ready;
   return reg;
 }
@@ -50,7 +49,6 @@ async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
   const timer = setTimeout(() => ctrl.abort(), 15000);
 
   try {
-    // deviceId varsa, avtomatik başlığa əlavə et
     const deviceId = localStorage.getItem(STORAGE_DEVICE) || "";
     const headers: Record<string, string> = {
       ...DEFAULT_HEADERS,
@@ -60,7 +58,7 @@ async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
     const res = await fetch(`${API}${path}`, {
       method: "POST",
       headers,
-      credentials: "include", // cookie/JWT üçün
+      credentials: "include",
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
@@ -81,24 +79,27 @@ async function apiPost<T = unknown>(path: string, body: any): Promise<T> {
 }
 
 /* ====== Public API ====== */
-
 type SubscribeResponse = {
   ok: boolean;
-  deviceId?: string;   // backend PushController.Subscribe göndərir
+  deviceId?: string;
   isNew?: boolean;
 };
 
 /** SW + FCM token alır və backend-ə subscribe edir; deviceId-i də saxlayır */
-// --- Replace existing subscribePush with this improved implementation ---
 export async function subscribePush(lang = "az"): Promise<{ token: string; deviceId?: string }> {
+  // ✅ Köhnə tokeni sil (localhost tokeni qalmasın)
+  const oldToken = localStorage.getItem(STORAGE_TOKEN);
+  if (oldToken && location.hostname !== "localhost") {
+    console.log("[push] clearing old token from previous domain");
+    localStorage.removeItem(STORAGE_TOKEN);
+  }
+
   const messaging = await getMessagingIfSupported();
   if (!messaging) throw new Error("Brauzer Web Push dəstəkləmir");
 
-  if (!VAPID) {
-    throw new Error("VAPID açarı tapılmadı (VITE_FB_VAPID_KEY).");
-  }
+  if (!VAPID) throw new Error("VAPID açarı tapılmadı (VITE_FB_VAPID_KEY).");
 
-  // iOS yalnız PWA (standalone) rejimində icazə verir
+  // iOS yalnız PWA rejimində icazə verir
   if (isIos() && !isStandalone()) {
     throw new Error(
       "iOS: Əvvəl Safari → Paylaş → 'Ana ekrana əlavə et' ilə tətbiqi quraşdır, sonra bildiriş icazəsi ver."
@@ -126,34 +127,27 @@ export async function subscribePush(lang = "az"): Promise<{ token: string; devic
   } catch (e: any) {
     console.error("FCM getToken error:", e);
     throw new Error(
-      "FCM token alınmadı. Zəhmət olmasa .env (.env.local) faylındakı VITE_FB_* dəyərlərinin Firebase Project ilə eyni olduğuna əmin ol."
+      "FCM token alınmadı. Zəhmət olmasa .env faylındakı VITE_FB_* dəyərlərinin Firebase Project ilə eyni olduğuna əmin ol."
     );
   }
 
   if (!token) throw new Error("FCM token alına bilmədi");
 
-  // --- NEW: quick sanity checks to avoid sending wrong tokens (JWT etc) ---
   const sample = token.slice(0, 120);
   console.log("[push] got fcm token sample:", sample);
 
-  // If token looks like a JWT (three dot-separated base64 parts), block and notify
   if (/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/.test(token)) {
-    // don't send JWT-like tokens to subscribe endpoint
     console.error("[push] token looks like a JWT — refusing to send to /api/push/subscribe");
-    throw new Error("Aldığımız token düzgün formatda deyil (JWT kimi görünür). Konsolda token sample-ı yoxla.");
+    throw new Error("Aldığımız token düzgün formatda deyil (JWT kimi görünür).");
   }
 
-  // basic length check
   if (token.length < 20) {
     console.error("[push] token too short:", token.length);
     throw new Error("Aldığımız token çox qısadır; subscribe prosesi uğursuz oldu.");
   }
 
-  // persist locally (so we don't POST repeatedly)
   localStorage.setItem(STORAGE_TOKEN, token);
 
-  // Backend-ə qeydiyyat
-  // Use absolute API (make sure env VITE_API_BASE is correct in production)
   try {
     const resp = await apiPost<SubscribeResponse>("/api/push/subscribe", {
       token,
@@ -170,16 +164,13 @@ export async function subscribePush(lang = "az"): Promise<{ token: string; devic
 
     return { token, deviceId: resp?.deviceId };
   } catch (e: any) {
-    // If server responded that token invalid, clear local stored token to allow retry later
     console.error("[push] subscribe POST failed:", e?.message || e);
-    // optionally remove saved token so next attempt re-creates
     localStorage.removeItem(STORAGE_TOKEN);
     throw e;
   }
 }
 
-
-// Köhnə adla uyğunluq
+/* ====== Köhnə adla uyğunluq ====== */
 export const enablePush = subscribePush;
 
 /** Backend-ə unsubscribe edir və local FCM token-i/deviceId-i silir */
@@ -190,17 +181,17 @@ export async function disablePush(): Promise<void> {
       await apiPost("/api/push/unsubscribe", { token });
     }
   } catch {
-    // ignore network error
+    /* ignore */
   }
 
   const messaging = await getMessagingIfSupported();
   if (messaging) {
-    try { await deleteToken(messaging); } catch {}
+    try {
+      await deleteToken(messaging);
+    } catch {}
   }
 
   localStorage.removeItem(STORAGE_TOKEN);
-  // deviceId-i də silmək istəyirsənsə, bunu da aç:
-  // localStorage.removeItem(STORAGE_DEVICE);
 }
 
 /** Backend-in əlçatanlığını yoxlamaq üçün */
@@ -213,7 +204,7 @@ export async function pingApi(): Promise<boolean> {
   }
 }
 
-/** Saxlanmış token/deviceId oxumaq üçün util (istəyə bağlı) */
+/** Saxlanmış token/deviceId oxumaq üçün */
 export function getStoredPushIdentity() {
   return {
     token: localStorage.getItem(STORAGE_TOKEN) || null,

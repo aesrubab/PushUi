@@ -1,4 +1,7 @@
 /* eslint-disable no-undef */
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", () => clients.claim());
+
 importScripts("https://www.gstatic.com/firebasejs/10.12.1/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.1/firebase-messaging-compat.js");
 
